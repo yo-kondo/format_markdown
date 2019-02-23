@@ -1,0 +1,9 @@
+[package]
+name = "format_markdown"
+version = "0.1.0"
+authors = ["y-kondo"]
+edition = "2018"
+
+[dependencies]
+walkdir = "2"
+regex = "1"

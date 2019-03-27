@@ -33,7 +33,7 @@ ISBN-10 : 9999999999\
 ISBN-13 : 999-9999999999\
 ASIN : XXXXXXXXXX\
 発売日 : yyyy/mm/dd\
-Amazon : [amszonへのリンク]()\
+Amazon : [amazonへのリンク]()\
 読了日 : yyyy/mm/dd\
 その他 : 
 ```
@@ -54,7 +54,7 @@ Amazon : [amszonへのリンク]()\
 * ISBN-13: 999-9999999999
 * ASIN: XXXXXXXXXX
 * ReleaseDate: yyyy/mm/dd
-* Link: [amszonへのリンク]()
+* Link: [amazonへのリンク]()
 * Tags:
 
 ---

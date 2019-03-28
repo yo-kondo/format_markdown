@@ -1,11 +1,26 @@
-use chrono::Local;
+use chrono::{DateTime, Local};
 use chrono::offset::TimeZone;
 use regex::Regex;
 
 use crate::info::Information;
 
+lazy_static! {
+        static ref HEADER_REGEX: Regex = {
+            Regex::new(r"^#+ ").unwrap()
+        };
+        static ref QUOTE_REGEX: Regex = {
+            Regex::new(r"> $").unwrap()
+        };
+        static ref BACKSLASH_REGEX: Regex = {
+            Regex::new(r"\\$").unwrap()
+        };
+        static ref FRONT_IMAGE: Regex = {
+            Regex::new(r"!\[表紙.*]\(").unwrap()
+        };
+    }
+
 /// markdownファイルを整形します。
-pub fn format_markdown(file_name: String, text: String) -> String {
+pub fn format_markdown(file_path: String, text: String) -> String {
     // 改行で分割してリストに格納
     let mut lines = Vec::new();
     for line in text.lines() {
@@ -19,7 +34,7 @@ pub fn format_markdown(file_name: String, text: String) -> String {
     let lines = delete_two_new_line(lines);
 
     // 基本情報を変更
-    let info = get_information(file_name, &lines);
+    let info = get_information(file_path, &lines);
     let lines = change_information(info);
 
     lines.join("\r\n")
@@ -27,11 +42,10 @@ pub fn format_markdown(file_name: String, text: String) -> String {
 
 /// 見出し（#、##、###など）の下に空行を追加します。
 fn add_header_after_empty_line(lines: Vec<String>) -> Vec<String> {
-    let header_regex = Regex::new(r"^#+ ").unwrap();
     let mut rtn_vec = Vec::new();
 
     for (i, v) in lines.iter().enumerate() {
-        if header_regex.is_match(&v) {
+        if HEADER_REGEX.is_match(&v) {
             if !lines[i + 1].is_empty() {
                 rtn_vec.push(v.to_string());
                 rtn_vec.push("".to_string());
@@ -45,11 +59,10 @@ fn add_header_after_empty_line(lines: Vec<String>) -> Vec<String> {
 
 /// `>`だけの行は後ろのスペースを除去します。
 fn delete_quote_empty(lines: Vec<String>) -> Vec<String> {
-    let quote_regex = Regex::new(r"> $").unwrap();
     let mut rtn_vec = Vec::new();
 
     for v in lines {
-        if quote_regex.is_match(&v) {
+        if QUOTE_REGEX.is_match(&v) {
             rtn_vec.push(v.trim_end().to_string());
         } else {
             rtn_vec.push(v);
@@ -60,11 +73,10 @@ fn delete_quote_empty(lines: Vec<String>) -> Vec<String> {
 
 /// 改行を`￥`から`  `（スペース2つ）に変更します。
 fn change_space(lines: Vec<String>) -> Vec<String> {
-    let backslash_regex = Regex::new(r"\\$").unwrap();
     let mut rtn_vec = Vec::new();
 
     for v in lines {
-        if backslash_regex.is_match(&v) {
+        if BACKSLASH_REGEX.is_match(&v) {
             rtn_vec.push(String::from(v.trim_end_matches(r"\").to_string() + "  "));
         } else {
             rtn_vec.push(v);
@@ -94,7 +106,7 @@ fn delete_two_new_line(lines: Vec<String>) -> Vec<String> {
 }
 
 /// 基本情報を取得します。
-fn get_information(file_name: String, lines: &Vec<String>) -> Information {
+fn get_information(file_path: String, lines: &Vec<String>) -> Information {
     let mut info = Information::new();
     for line in lines.to_owned() {
         // タイトル
@@ -108,9 +120,9 @@ fn get_information(file_name: String, lines: &Vec<String>) -> Information {
         }
 
         // 表紙の画像パス
-        let index_front_image = "![表紙](";
-        if line.starts_with(index_front_image) {
+        if FRONT_IMAGE.is_match(&line) {
             info.front_image.push(line
+                .replace("表紙 :  ", "")
                 .trim_end()
                 .to_string());
             continue;
@@ -120,13 +132,7 @@ fn get_information(file_name: String, lines: &Vec<String>) -> Information {
         let index_reading_date = "読了日 : ";
         if line.starts_with(index_reading_date) {
             let date = line.replace(&index_reading_date, "");
-            let date = Local.datetime_from_str(
-                &format!("{} {}", date, "00:00:00"), "%Y/%m/%d %H:%M:%S");
-            let date = match date {
-                Ok(t) => t,
-                Err(e) => panic!(
-                    "読了日の日付変換でエラーが発生しました。ファイル名: {}\n{}", &file_name, e),
-            };
+            let date = parse_date("読了日", &file_path, date);
             info.reading_date = date;
             continue;
         }
@@ -157,7 +163,7 @@ fn get_information(file_name: String, lines: &Vec<String>) -> Information {
                 .replace(index_isbn10, "")
                 .replace("－", "-")
                 .trim_end()
-                .to_string();;
+                .to_string();
         }
 
         // ISBN-13
@@ -184,14 +190,11 @@ fn get_information(file_name: String, lines: &Vec<String>) -> Information {
         let index_release_date = "発売日 : ";
         if line.starts_with(index_release_date) {
             let date = line.replace(&index_release_date, "");
-            let date = Local.datetime_from_str(
-                &format!("{} {}", date, "00:00:00"), "%Y/%m/%d %H:%M:%S");
-            let date = match date {
-                Ok(t) => t,
-                Err(e) => panic!(
-                    "発売日の日付変換でエラーが発生しました。ファイル名: {}\n{}", &file_name, e),
-            };
-            info.release_date = date;
+
+            if date.trim_end() != "－" {
+                let date = parse_date("発売日", &file_path, date);
+                info.release_date = date;
+            }
             continue;
         }
 
@@ -218,6 +221,18 @@ fn change_information(info: Information) -> Vec<String> {
     unimplemented!();
 }
 
+/// "yyyy/mm/dd"の日付をDateTime<Local>に変換します。
+fn parse_date(column_name: &str, file_path: &String, str_date: String) -> DateTime<Local> {
+    let date = Local.datetime_from_str(
+        &format!("{} {}", str_date, "00:00:00"), "%Y/%m/%d %H:%M:%S");
+    match date {
+        Ok(t) => t,
+        Err(e) => panic!(
+            "{}の日付変換でエラーが発生しました。ファイル名: {}\n{}", column_name, &file_path, e),
+    }
+}
+
+#[cfg(test)]
 mod test {
     use chrono::Local;
     use chrono::offset::TimeZone;
@@ -229,12 +244,12 @@ mod test {
     fn test() {
         // TODO: デバッグ用のtest
 
-        let info = Information::new();
-        let mut info2 = Information::new();
-        info2.title = "hoge".to_string();
-
-        let info_str = format!("{:?}", info);
-        let info_str2 = format!("{:?}", info2);
+//        let info = Information::new();
+//        let mut info2 = Information::new();
+//        info2.title = "hoge".to_string();
+//
+//        let info_str = format!("{:?}", info);
+//        let info_str2 = format!("{:?}", info2);
 
 //        assert_eq!(info_str, info_str2);
     }
@@ -334,8 +349,9 @@ mod test {
             String::from(""),
             String::from("## 基本情報"),
             String::from(""),
-            String::from("表紙 :  "),
-            String::from("![表紙](画像のパス)  "),
+            String::from("表紙 :  ![表紙](画像のパス)  "),
+            String::from("![表紙2](画像のパス2)  "),
+            String::from("![表紙3](画像のパス3)  "),
             String::from("著者 : 著者の名前  "),
             String::from("出版社 : 出版社の名前  "),
             String::from("ISBN-10 : 1234567890  "),
@@ -350,6 +366,8 @@ mod test {
             title: "タイトル".to_string(),
             front_image: vec![
                 "![表紙](画像のパス)".to_string(),
+                "![表紙2](画像のパス2)".to_string(),
+                "![表紙3](画像のパス3)".to_string(),
             ],
             reading_date: Local.ymd(2019, 3, 4).and_hms(0, 0, 0),
             author: "著者の名前".to_string(),
@@ -361,7 +379,7 @@ mod test {
             link: "[amazonへのリンク](https://example.com)".to_string(),
             tags: "タグ1, タグ2".to_string(),
         };
-        let actual = get_information("file_name".to_string(),&input);
+        let actual = get_information("file_path".to_string(), &input);
         assert_eq!(expected, actual);
     }
 }

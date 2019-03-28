@@ -1,4 +1,4 @@
-use chrono::{Date, DateTime, Local};
+use chrono::{DateTime, Local};
 use chrono::offset::TimeZone;
 
 /// 基本情報

@@ -1,8 +1,4 @@
-use chrono::{DateTime, Local};
-use chrono::offset::TimeZone;
 use regex::Regex;
-
-use crate::info::Information;
 
 lazy_static! {
         static ref HEADER_REGEX: Regex = {
@@ -20,7 +16,7 @@ lazy_static! {
     }
 
 /// markdownファイルを整形します。
-pub fn format_markdown(file_path: String, text: String) -> String {
+pub fn format_markdown(text: String) -> String {
     // 改行で分割してリストに格納
     let mut lines = Vec::new();
     for line in text.lines() {
@@ -32,10 +28,6 @@ pub fn format_markdown(file_path: String, text: String) -> String {
     let lines = delete_quote_empty(lines);
     let lines = change_space(lines);
     let lines = delete_two_new_line(lines);
-
-    // 基本情報を変更
-    let info = get_information(file_path, &lines);
-    let lines = change_information(info);
 
     lines.join("\r\n")
 }
@@ -105,154 +97,9 @@ fn delete_two_new_line(lines: Vec<String>) -> Vec<String> {
     rtn_vec
 }
 
-/// 基本情報を取得します。
-fn get_information(file_path: String, lines: &Vec<String>) -> Information {
-    let mut info = Information::new();
-    for line in lines.to_owned() {
-        // タイトル
-        let index_title = "# ";
-        if line.starts_with(index_title) {
-            info.title = line
-                .replace(index_title, "")
-                .trim_end()
-                .to_string();
-            continue;
-        }
-
-        // 表紙の画像パス
-        if FRONT_IMAGE.is_match(&line) {
-            info.front_image.push(line
-                .replace("表紙 :  ", "")
-                .trim_end()
-                .to_string());
-            continue;
-        }
-
-        // 読了日
-        let index_reading_date = "読了日 : ";
-        if line.starts_with(index_reading_date) {
-            let date = line.replace(&index_reading_date, "");
-            let date = parse_date("読了日", &file_path, date);
-            info.reading_date = date;
-            continue;
-        }
-
-        // 著者
-        let index_author = "著者 : ";
-        if line.starts_with(index_author) {
-            info.author = line
-                .replace(index_author, "")
-                .trim_end()
-                .to_string();
-            continue;
-        }
-
-        // 出版社
-        let index_publisher = "出版社 : ";
-        if line.starts_with(index_publisher) {
-            info.publisher = line
-                .replace(index_publisher, "")
-                .trim_end()
-                .to_string();
-        }
-
-        // ISBN-10
-        let index_isbn10 = "ISBN-10 : ";
-        if line.starts_with(index_isbn10) {
-            info.isbn10 = line
-                .replace(index_isbn10, "")
-                .replace("－", "-")
-                .trim_end()
-                .to_string();
-        }
-
-        // ISBN-13
-        let index_isbn13 = "ISBN-13 : ";
-        if line.starts_with(index_isbn13) {
-            info.isbn13 = line
-                .replace(index_isbn13, "")
-                .replace("－", "-")
-                .trim_end()
-                .to_string();
-        }
-
-        // ASIN
-        let index_asin = "ASIN : ";
-        if line.starts_with(index_asin) {
-            info.asin = line
-                .replace(index_asin, "")
-                .replace("－", "-")
-                .trim_end()
-                .to_string();
-        }
-
-        // 発売日
-        let index_release_date = "発売日 : ";
-        if line.starts_with(index_release_date) {
-            let date = line.replace(&index_release_date, "");
-
-            if date.trim_end() != "－" {
-                let date = parse_date("発売日", &file_path, date);
-                info.release_date = date;
-            }
-            continue;
-        }
-
-        // Amazon URL
-        let index_link = "Amazon : ";
-        if line.starts_with(index_link) {
-            info.link = line
-                .replace(index_link, "")
-                .trim_end()
-                .to_string();
-        }
-
-        // タグ
-        let index_tags = "その他 : ";
-        if line.starts_with(index_tags) {
-            info.tags = line.replace(index_tags, "");
-        }
-    }
-    info
-}
-
-/// 元の基本情報を削除し、新しい基本情報を追加します。
-fn change_information(info: Information) -> Vec<String> {
-    unimplemented!();
-}
-
-/// "yyyy/mm/dd"の日付をDateTime<Local>に変換します。
-fn parse_date(column_name: &str, file_path: &String, str_date: String) -> DateTime<Local> {
-    let date = Local.datetime_from_str(
-        &format!("{} {}", str_date, "00:00:00"), "%Y/%m/%d %H:%M:%S");
-    match date {
-        Ok(t) => t,
-        Err(e) => panic!(
-            "{}の日付変換でエラーが発生しました。ファイル名: {}\n{}", column_name, &file_path, e),
-    }
-}
-
 #[cfg(test)]
 mod test {
-    use chrono::Local;
-    use chrono::offset::TimeZone;
-
-    use crate::info::Information;
     use crate::md::*;
-
-    #[test]
-    fn test() {
-        // TODO: デバッグ用のtest
-
-//        let info = Information::new();
-//        let mut info2 = Information::new();
-//        info2.title = "hoge".to_string();
-//
-//        let info_str = format!("{:?}", info);
-//        let info_str2 = format!("{:?}", info2);
-
-//        assert_eq!(info_str, info_str2);
-    }
 
     #[test]
     fn add_header_after_empty_line_test1() {
@@ -339,47 +186,6 @@ mod test {
             String::from(""),
         ];
         let actual = delete_two_new_line(input);
-        assert_eq!(expected, actual);
-    }
-
-    #[test]
-    fn get_information_test1() {
-        let input = vec![
-            String::from("# タイトル"),
-            String::from(""),
-            String::from("## 基本情報"),
-            String::from(""),
-            String::from("表紙 :  ![表紙](画像のパス)  "),
-            String::from("![表紙2](画像のパス2)  "),
-            String::from("![表紙3](画像のパス3)  "),
-            String::from("著者 : 著者の名前  "),
-            String::from("出版社 : 出版社の名前  "),
-            String::from("ISBN-10 : 1234567890  "),
-            String::from("ISBN-13 : 123-1234567890  "),
-            String::from("ASIN : ABCDEFGHIJ  "),
-            String::from("発売日 : 2018/01/02  "),
-            String::from("Amazon : [amazonへのリンク](https://example.com)  "),
-            String::from("読了日 : 2019/03/04  "),
-            String::from("その他 : タグ1, タグ2"),
-        ];
-        let expected = Information {
-            title: "タイトル".to_string(),
-            front_image: vec![
-                "![表紙](画像のパス)".to_string(),
-                "![表紙2](画像のパス2)".to_string(),
-                "![表紙3](画像のパス3)".to_string(),
-            ],
-            reading_date: Local.ymd(2019, 3, 4).and_hms(0, 0, 0),
-            author: "著者の名前".to_string(),
-            publisher: "出版社の名前".to_string(),
-            isbn10: "1234567890".to_string(),
-            isbn13: "123-1234567890".to_string(),
-            asin: "ABCDEFGHIJ".to_string(),
-            release_date: Local.ymd(2018, 1, 2).and_hms(0, 0, 0),
-            link: "[amazonへのリンク](https://example.com)".to_string(),
-            tags: "タグ1, タグ2".to_string(),
-        };
-        let actual = get_information("file_path".to_string(), &input);
         assert_eq!(expected, actual);
     }
 }

@@ -8,7 +8,6 @@ use std::{fs, io};
 use std::io::Write;
 
 mod md;
-mod info;
 
 /// Settings構造体
 #[derive(Debug, Deserialize)]
@@ -29,7 +28,7 @@ fn main() {
             Err(e) => panic!(
                 "ファイル読み込みでエラーが発生しました。ファイル名: {}\n{}", &file_path, e),
         };
-        let format_text = md::format_markdown(file_path.to_string(), text);
+        let format_text = md::format_markdown(text);
 
         // ファイル書き込み
         let write_file = fs::OpenOptions::new()

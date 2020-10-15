@@ -1,6 +1,6 @@
 # format_markdown
 
-Markdownをmarkdownlintにあわせて修正します。
+Markdownをmarkdownlintにあわせて修正する。
 
 ## 詳細仕様
 
